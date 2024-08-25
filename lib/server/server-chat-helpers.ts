@@ -1,34 +1,25 @@
-import { Database, Tables } from "@/supabase/types"
-import { VALID_ENV_KEYS } from "@/types/valid-keys"
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { getServerSession } from "next-auth"
+import { createClient } from "@supabase/supabase-js"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
 export async function getServerProfile() {
-  const cookieStore = cookies()
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        }
-      }
-    }
-  )
-
-  const user = (await supabase.auth.getUser()).data.user
-  if (!user) {
-    throw new Error("User not found")
+  const session = await getServerSession(authOptions)
+  if (!session || !session.user) {
+    throw new Error("User not authenticated")
   }
 
-  const { data: profile } = await supabase
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("email", session.user.email)
     .single()
 
-  if (!profile) {
+  if (error || !profile) {
     throw new Error("Profile not found")
   }
 
